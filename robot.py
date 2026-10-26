@@ -6,6 +6,7 @@ import time
 import math
 
 IMU_YAW = "Device/SubDeviceList/InertialSensor/AngleZ/Sensor/Value"
+IMU_ROLL = "Device/SubDeviceList/InertialSensor/AngleX/Sensor/Value"
 HEAD_MIDDLE = "Device/SubDeviceList/Head/Touch/Middle/Sensor/Value"
 HEAD_REAR = "Device/SubDeviceList/Head/Touch/Rear/Sensor/Value"
 
@@ -48,8 +49,11 @@ class Robot:
     def say(self, text):
         self.tts_service.say(text)
     
-    def move(self, v_x, v_y, v_theta):
-        self.motion_service.moveToward(v_x, v_y, v_theta, self.move_config)
+    def move(self, v_x, v_y, v_theta, caution=False):
+        if caution:
+            self.motion_service.moveToward(v_x, v_y, v_theta, [["MaxStepX", 0.06], ["MaxStepY", 0.16], ["MaxStepTheta", 0.4], ["MaxStepFrequency", 0.6], ["StepHeight", 0.04], ["TorsoWx", 0], ["TorsoWy", 0]])
+        else:
+            self.motion_service.moveToward(v_x, v_y, v_theta, self.move_config)
 
     def move_to(self, x, y, theta):
         self.motion_service.moveTo(x, y, theta, self.move_config)
@@ -65,8 +69,32 @@ class Robot:
     def get_yaw(self):
         return self.motion_service.getRobotPosition(True)[2] + self.delta_yaw  # Wz is an angle between [-pi, pi]
 
+    def get_roll(self):
+        return self.memory_service.getData(IMU_ROLL)
+
     def get_head_yaw_angle(self):
         return self.motion_service.getAngles(["HeadYaw"], True)[0]
+    
+    def get_head_pitch_angle(self):
+        return self.motion_service.getAngles(["HeadPitch"], True)[0]
+
+    def save(self, direction):
+        self.motion_service.stopMove()
+        self.motion_service.setFallManagerEnabled(False)
+
+        hip_roll = 0.7
+        names = ["LHipRoll", "RHipRoll", "LAnklePitch", "RAnklePitch"]
+
+        if direction > 0:
+            angles = [hip_roll, -0.1, -0.5, -0.5]
+        else:
+            angles = [0.1, -hip_roll, -0.5, -0.5]
+
+        self.motion_service.angleInterpolation(names, angles, [0.25] * 4, True)
+
+    def recover(self):
+        self.motion_service.setFallManagerEnabled(True)
+        self.posture_service.goToPosture("StandInit", 0.5)
     
     def get_rear_head_touch(self):
         return self.memory_service.getData(HEAD_REAR)
@@ -85,7 +113,7 @@ class Robot:
         self.delta_yaw = (yaw - current_yaw + math.pi) % (2 * math.pi) - math.pi  # [-pi, pi]
 
     def look(self, pitch, yaw):
-        self.motion_service.setAngles(["HeadPitch", "HeadYaw"], [pitch, yaw], 0.1)
+        self.motion_service.setAngles(["HeadPitch", "HeadYaw"], [pitch, yaw], 0.5)
 
     def rest(self):
         self.motion_service.rest()
