@@ -1,5 +1,5 @@
 import cv2
-from camera import Camera
+from vision.camera import Camera
 import numpy as np
 
 class BallDetector:
