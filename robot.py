@@ -9,6 +9,8 @@ IMU_YAW = "Device/SubDeviceList/InertialSensor/AngleZ/Sensor/Value"
 HEAD_MIDDLE = "Device/SubDeviceList/Head/Touch/Middle/Sensor/Value"
 HEAD_REAR = "Device/SubDeviceList/Head/Touch/Rear/Sensor/Value"
 
+BOARD_SIZE = 5
+
 class Robot:
     def __init__(self, ip, port):
         self.ip = ip
@@ -62,13 +64,25 @@ class Robot:
     
     def get_yaw(self):
         return self.motion_service.getRobotPosition(True)[2] + self.delta_yaw  # Wz is an angle between [-pi, pi]
+
+    def get_head_yaw_angle(self):
+        return self.motion_service.getAngles(["HeadYaw"], True)[0]
     
     def get_rear_head_touch(self):
         return self.memory_service.getData(HEAD_REAR)
 
+    def get_current_cell(self):
+        x, y, _ = self.motion_service.getRobotPosition(True)
+        cell_x = round(x / 0.244)
+        cell_y = round(y / 0.244)
+
+        cell_id = cell_x + cell_y * BOARD_SIZE
+
+        return cell_id
+
     def set_yaw(self, yaw):
         current_yaw = self.get_yaw()
-        self.delta_yaw = (yaw - current_yaw) % (2 * math.pi) - math.pi  # [-pi, pi]
+        self.delta_yaw = (yaw - current_yaw + math.pi) % (2 * math.pi) - math.pi  # [-pi, pi]
 
     def look(self, pitch, yaw):
         self.motion_service.setAngles(["HeadPitch", "HeadYaw"], [pitch, yaw], 0.1)
