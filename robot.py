@@ -1,7 +1,7 @@
 import qi
 from vision.camera import Camera
 from vision.ball_detector import BallDetector
-from vision.tag_detector import TagDetector
+#from vision.tag_detector import TagDetector
 import time
 import math
 
