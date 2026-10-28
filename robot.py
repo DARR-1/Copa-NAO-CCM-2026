@@ -1,6 +1,7 @@
 import qi
 from vision.camera import Camera
 from vision.ball_detector import BallDetector
+from behaviors.kick import Kick
 #from vision.tag_detector import TagDetector
 import time
 import math
@@ -24,6 +25,8 @@ class Robot:
         self.camera = Camera(self.app.session)
         self.ball_detector = BallDetector(self.app.session)
         # self.tag_detector = TagDetector(self.app.session)
+
+        self.kick = Kick(self)
 
         self.delta_yaw = 0.0
 

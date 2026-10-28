@@ -23,5 +23,8 @@ class Camera:
         frame = np.frombuffer(img[6], dtype=np.uint8)
         return frame.reshape((h, w, layers)) if layers > 1 else frame.reshape((h, w))
 
+    def set_camera(self, camera):
+        self.video.setActiveCamera(self.handle, camera)
+
     def close(self):
         self.video.unsubscribe(self.handle)
