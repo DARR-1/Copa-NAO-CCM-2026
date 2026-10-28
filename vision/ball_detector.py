@@ -3,8 +3,8 @@ from vision.camera import Camera
 import numpy as np
 
 class BallDetector:
-    def __init__(self, session):
-        self.camera = Camera(session, colorspace=13)
+    def __init__(self, session, cam_id=1):
+        self.camera = Camera(session, camera=cam_id, colorspace=13)
 
         self.lower_color_m1 = (16, 10, 30)
         self.upper_color_m1 = (41, 53, 68)
