@@ -2,7 +2,7 @@ import qi
 import time
 import math
 
-NAO_IP = "192.168.0.165"
+NAO_IP = "192.168.0.4"
 NAO_PORT = 9559
 
 VELOCIDAD = 0.5

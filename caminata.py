@@ -1,7 +1,7 @@
 import qi
 import time
 
-NAO_IP = "192.168.0.165"
+NAO_IP = "192.168.0.4"
 NAO_PORT = 9559
 
 def main():
@@ -24,7 +24,7 @@ def main():
         posture.goToPosture("StandInit", 0.5)
 
         # Empezar a caminar hacia adelante (no bloquea)
-        motion.moveToward(0.5, 0.0, -0.05)   # x, y, theta
+        motion.moveToward(0.5, 0.0, 0)   # x, y, theta
         print("Caminando. Presiona el sensor trasero para detenerlo.")
 
         # Seguir caminando hasta que se presione el sensor trasero

@@ -1,7 +1,7 @@
 import qi
 import time
 
-NAO_IP = "192.168.0.165"
+NAO_IP = "192.168.0.4"
 NAO_PORT = 9559
 
 # Articulaciones de la pierna derecha
