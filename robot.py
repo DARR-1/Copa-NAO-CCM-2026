@@ -1,6 +1,8 @@
 import qi
 from vision.camera import Camera
 from vision.ball_detector import BallDetector
+from vision.goalkeeper_detector import GoalkeeperDetector
+from behaviors.kick import Kick
 #from vision.tag_detector import TagDetector
 import math
 from utils.PID import PID
@@ -28,7 +30,11 @@ class Robot:
 
         self.camera = Camera(self.app.session)
         self.ball_detector = BallDetector(self.app.session)
+        # comparte la cámara de la pelota: get_movement cambia a la superior y regresa a la inferior
+        self.goalkeeper_detector = GoalkeeperDetector(self.ball_detector.camera)
         # self.tag_detector = TagDetector(self.app.session)
+
+        self.kick = Kick(self)
 
         self.delta_yaw = 0.0
 
@@ -131,6 +137,7 @@ class Robot:
 
     def stop(self):
         self.motion_service.killAll()
+
 
     def dance(self):
         print("Starting dance routine...")

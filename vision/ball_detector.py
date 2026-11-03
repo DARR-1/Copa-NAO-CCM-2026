@@ -4,16 +4,18 @@ import numpy as np
 
 class BallDetector:
     def __init__(self, session, cam_id=1):
-        self.camera = Camera(session, camera=cam_id, colorspace=13)
+        self.camera = Camera(session, camera=cam_id, colorspace=13, name="ball_cam")
 
-        self.lower_color_m1 = (16, 10, 30)
-        self.upper_color_m1 = (41, 53, 68)
+        # El rojo da la vuelta en HSV: M1 cubre el extremo alto (170-179) y M2 el bajo (0-5)
+        self.lower_color_m1 = (170, 100, 90)
+        self.upper_color_m1 = (179, 255, 255)
 
-        self.lower_color_m2 = (0, 124, 193)
-        self.upper_color_m2 = (12, 255, 255)
+        self.lower_color_m2 = (0, 90, 90)
+        self.upper_color_m2 = (5, 255, 255)
 
-        self.fov_rad = np.deg2rad(60)
+        self.fov_rad = np.deg2rad(56.3)  # FOV horizontal de las cámaras del NAO
         self.ball_diameter = 0.065
+        self.frame_size = None  # (w, h) del último frame leído
 
         self.trackbars_ready = False
 
@@ -77,6 +79,8 @@ class BallDetector:
         if frame is None:
             return None, None
 
+        self.frame_size = (frame.shape[1], frame.shape[0])
+
         if show_video:
             if not self.trackbars_ready:
                 self.setup_trackbars()
@@ -107,35 +111,28 @@ class BallDetector:
 
         return (x, y, r), mask
 
-    """
-    def get_ball_position(self):
-        frame = self.camera.get_frame()
-
-        if frame is None:
-            return None
-
-        detection, _ = self.detect_ball(frame)
-
-        if detection is None:
+    # Recibe la detección (x, y, r) de get_actual_detection (ya centrada) y
+    # regresa (X, Y, Z) en metros respecto a la cámara. Z es la distancia sobre
+    # el eje óptico, no sobre el piso. Regresa None si la pelota toca el borde
+    # del frame, porque el radio ya no es confiable.
+    def get_ball_position(self, detection):
+        if detection is None or self.frame_size is None:
             return None
 
         x, y, r = detection
+        w, h = self.frame_size
 
-        h, w = frame.shape[:2]
+        if abs(x) + r >= w / 2.0 or abs(y) + r >= h / 2.0:
+            return None
 
         f = (w / 2.0) / np.tan(self.fov_rad / 2.0)
-        cx, cy = w / 2.0, h / 2.0
-
-        if x - r <= 0 or y - r <= 0 or x + r >= w or y + r >= h:
-            return None
 
         d = 2.0 * r
         Z = f * self.ball_diameter / d
-        X = (x - cx) * Z / f
-        Y = (y - cy) * Z / f
+        X = x * Z / f
+        Y = y * Z / f
 
         return X, Y, Z
-    """
 
     def close(self):
         self.camera.close()
