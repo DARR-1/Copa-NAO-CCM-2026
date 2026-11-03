@@ -30,16 +30,15 @@ def update_walls(id_tag, theta_tag, theta_robot):
     :param theta_tag: The angle of the tag (cell) the robot is currently in
     :param theta_robot: The angle of the robot plus the angle of the head in yaw
     """
-    theta_abs = (theta_tag + theta_robot) % (2 * math.pi) - math.pi  # [-pi, pi]
-
-    if theta_abs == -math.pi:
-        theta_abs = math.pi
+    # theta_tag is the tag's z axis (pointing into the wall) in the camera frame, positive = to the camera's right;
+    # yaw is positive to the left, so the wall direction in the world is theta_robot - theta_tag
+    theta_abs = normalize_angle(theta_robot - theta_tag)
 
     most_similar_diff = math.inf
     most_similar_id = 0
 
     for i, wall_theta in enumerate(walls_angles):
-        diff = abs(theta_abs - wall_theta)
+        diff = abs(normalize_angle(theta_abs - wall_theta))  # wrapped, so -179 deg is close to 180 deg (S)
         
         if diff < most_similar_diff:
             most_similar_diff = diff
@@ -189,12 +188,10 @@ class Maze:
     def update_from_detection(self):
         id_tag, theta_tag, _ = self.tag_detector.get_actual_detection(show_video=True)
 
-        detection = [id_tag, theta_tag]
-
-        if not id_tag and not theta_tag:
+        # Tag 0 is a valid cell, so check for None instead of falsy
+        if id_tag is None:
             return
 
-        id_tag, theta_tag = detection
         position_changed = id_tag != self.current_cell
 
         self.current_cell = id_tag

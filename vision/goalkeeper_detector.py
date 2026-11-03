@@ -110,7 +110,9 @@ class GoalkeeperDetector:
 
         return direction, confidence
 
-    def get_movement(self, samples=10, show_video=False):
+    def get_movement(self, samples=10, show_video=False, timeout=2.0):
+        # timeout en segundos: si se acaba, vota con las muestras que alcanzó a tomar
+        deadline = time.monotonic() + timeout
         self.previous_frame = None
 
         votes = []
@@ -119,10 +121,15 @@ class GoalkeeperDetector:
 
         try:
             for _ in range(3):
+                if time.monotonic() > deadline:
+                    break
                 self.camera.get_frame()
                 time.sleep(1.0 / self.fps)
 
             for _ in range(samples + 1):
+                if time.monotonic() > deadline:
+                    break
+
                 direction, _ = self.get_actual_detection(
                     show_video=show_video
                 )
