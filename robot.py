@@ -2,8 +2,8 @@ import qi
 from vision.camera import Camera
 from vision.ball_detector import BallDetector
 #from vision.tag_detector import TagDetector
-import time
 import math
+from utils.PID import PID
 
 IMU_YAW = "Device/SubDeviceList/InertialSensor/AngleZ/Sensor/Value"
 IMU_ROLL = "Device/SubDeviceList/InertialSensor/AngleX/Sensor/Value"
@@ -19,6 +19,8 @@ class Robot:
         self.app = qi.Application(["Robot", "--qi-url=tcp://{}:{}".format(ip, port)])
         self.app.start()
 
+        self.session = self.app.session
+
         self.motion_service = self.app.session.service("ALMotion")
         self.posture_service = self.app.session.service("ALRobotPosture")
         self.tts_service = self.app.session.service("ALTextToSpeech")
@@ -32,7 +34,7 @@ class Robot:
 
         self.move_config = [
             ["MaxStepX", 0.08], # we recommend 0.060 meters for StepX for more stability. Better use 0.080 meters only when walking on flat hard floors.
-            ["MaxStepY", 0.16],
+            ["MaxStepY", 0.14],
             ["MaxStepTheta", 0.524],
 
             ["MaxStepFrequency", 0.8],
@@ -51,12 +53,18 @@ class Robot:
     
     def move(self, v_x, v_y, v_theta, caution=False):
         if caution:
-            self.motion_service.moveToward(v_x, v_y, v_theta, [["MaxStepX", 0.06], ["MaxStepY", 0.16], ["MaxStepTheta", 0.4], ["MaxStepFrequency", 0.6], ["StepHeight", 0.04], ["TorsoWx", 0], ["TorsoWy", 0]])
+            self.motion_service.moveToward(v_x, v_y, v_theta, [["MaxStepX", 0.06], ["MaxStepY", 0.14], ["MaxStepTheta", 0.4], ["MaxStepFrequency", 0.6], ["StepHeight", 0.04], ["TorsoWx", 0], ["TorsoWy", 0]])
         else:
             self.motion_service.moveToward(v_x, v_y, v_theta, self.move_config)
 
-    def move_to(self, x, y, theta):
-        self.motion_service.moveTo(x, y, theta, self.move_config)
+    def _wrap(self, angle):
+        return math.atan2(math.sin(angle), math.cos(angle))
+
+    def move_to(self, x, y, theta, caution=False):
+        if caution:
+            self.motion_service.moveTo(x, y, theta, [["MaxStepX", 0.04], ["MaxStepY", 0.14], ["MaxStepTheta", 0.1], ["MaxStepFrequency", 0.1], ["StepHeight", 0.020], ["TorsoWx", 0], ["TorsoWy", 0]])
+        else:
+            self.motion_service.moveTo(x, y, theta, self.move_config)
 
     def wait_for_start(self):
         while True:
@@ -123,3 +131,11 @@ class Robot:
 
     def stop(self):
         self.motion_service.killAll()
+
+    def dance(self):
+        print("Starting dance routine...")
+
+    def prepare_for_move(self):
+        self.motion_service.setStiffnesses("Body", 1.0)
+        self.move(0.01, 0, 0)
+        self.move(0, 0, 0)

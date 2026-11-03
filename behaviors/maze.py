@@ -6,7 +6,7 @@ from vision.tag_detector import TagDetector
 BOARD_SIZE = 5
 CENTER_CELL = (BOARD_SIZE * BOARD_SIZE) // 2
 
-CELL_SIZE = 0.244
+CELL_SIZE = 0.24 * 2
 VISITED_CELL_COST = 2
 
 DIRECTION_OFFSETS = [-BOARD_SIZE, 1, BOARD_SIZE, -1]
@@ -140,7 +140,7 @@ class Maze:
 
     def __init__(self, robot):
         self.robot = robot
-        self.tag_detector = TagDetector()
+        self.tag_detector = TagDetector(robot.session)
         self.state = Maze.EXPLORING  # EXPLORING: going to the center, RETURNING: going back to the start discovering, FINAL_RUN: shortest path to the center
         self.started = False
 
@@ -151,6 +151,8 @@ class Maze:
         self.path = []
         self.directions = []
         self.step_index = 0
+
+        self.robot.set_yaw(0)  # Ensure the robot starts facing north
 
     def get_goal_cell(self):
         if self.state == Maze.RETURNING:
@@ -185,9 +187,11 @@ class Maze:
         self.plan()
 
     def update_from_detection(self):
-        detection, _ = self.tag_detector.get_actual_detection(show_video=True)
+        id_tag, theta_tag, _ = self.tag_detector.get_actual_detection(show_video=True)
 
-        if not detection:
+        detection = [id_tag, theta_tag]
+
+        if not id_tag and not theta_tag:
             return
 
         id_tag, theta_tag = detection
@@ -210,10 +214,26 @@ class Maze:
             return
 
         target_yaw = self.directions[self.step_index]
-        rotation = normalize_angle(target_yaw - self.robot.get_yaw())
+        current_yaw = self.robot.get_yaw()
 
-        self.robot.move_to(0, 0, rotation)  # Move towards the first direction in the path
-        self.robot.move_to(CELL_SIZE, 0, 0)
+        # Rotacion necesaria para caminar de lado hacia la izquierda (+1) o la derecha (-1)
+        best_side = 1
+        best_rotation = None
+
+        for side in (1, -1):
+            desired_yaw = normalize_angle(target_yaw - side * math.pi / 2)
+            rotation = normalize_angle(desired_yaw - current_yaw)
+
+            if best_rotation is None or abs(rotation) < abs(best_rotation):
+                best_side = side
+                best_rotation = rotation
+
+        self.robot.move_to(0, 0, best_rotation, caution=True)  # Girar (maximo 90 grados)
+
+        # Mirar hacia donde va a caminar
+        self.robot.look(-best_side * math.radians(16), best_side * math.pi / 2)
+
+        self.robot.move_to(0, best_side * CELL_SIZE, 0, caution=True)  # Avanzar de lado
 
         self.step_index += 1
         self.current_cell = self.path[self.step_index]
@@ -226,6 +246,8 @@ class Maze:
             self.plan()
 
         if self.state == Maze.FINISHED:
+            self.robot.say("Maze completed.")
+            self.robot.dance()
             return
 
         self.update_from_detection()
