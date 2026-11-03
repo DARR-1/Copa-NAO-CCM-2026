@@ -5,7 +5,7 @@ from vision.camera import Camera
 
 class TagDetector:
     def __init__(self, session):
-        self.camera = Camera(session, colorspace=0, name="tag_cam")
+        self.camera = Camera(session, colorspace=0, name="tag_cam", camera=0)
         self.camera_params = self.get_camera_params()
         self.at_detector = Detector(families="tag36h11",
                                     nthreads=1,
