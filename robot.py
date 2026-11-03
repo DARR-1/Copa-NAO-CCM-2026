@@ -1,5 +1,4 @@
 import qi
-from vision.camera import Camera
 from vision.ball_detector import BallDetector
 from vision.goalkeeper_detector import GoalkeeperDetector
 from behaviors.kick import Kick
@@ -11,6 +10,13 @@ IMU_YAW = "Device/SubDeviceList/InertialSensor/AngleZ/Sensor/Value"
 IMU_ROLL = "Device/SubDeviceList/InertialSensor/AngleX/Sensor/Value"
 HEAD_MIDDLE = "Device/SubDeviceList/Head/Touch/Middle/Sensor/Value"
 HEAD_REAR = "Device/SubDeviceList/Head/Touch/Rear/Sensor/Value"
+FOOT_BUMPERS = [
+    "Device/SubDeviceList/LFoot/Bumper/Left/Sensor/Value",
+    "Device/SubDeviceList/LFoot/Bumper/Right/Sensor/Value",
+    "Device/SubDeviceList/RFoot/Bumper/Left/Sensor/Value",
+    "Device/SubDeviceList/RFoot/Bumper/Right/Sensor/Value",
+]
+SHOULDERS = ["LShoulderRoll", "RShoulderRoll"]
 
 BOARD_SIZE = 5
 
@@ -28,7 +34,6 @@ class Robot:
         self.tts_service = self.app.session.service("ALTextToSpeech")
         self.memory_service = self.app.session.service("ALMemory")
 
-        self.camera = Camera(self.app.session)
         self.ball_detector = BallDetector(self.app.session)
         # comparte la cámara de la pelota: get_movement cambia a la superior y regresa a la inferior
         self.goalkeeper_detector = GoalkeeperDetector(self.ball_detector.camera)
@@ -66,25 +71,41 @@ class Robot:
     def _wrap(self, angle):
         return math.atan2(math.sin(angle), math.cos(angle))
 
-    def move_to(self, x, y, theta, caution=False):
+    def move_to(self, x, y, theta, caution=False, wait=True):
+        # wait=False regresa un qi.Future de inmediato para poder seguir leyendo la cámara mientras camina
         if caution:
-            self.motion_service.moveTo(x, y, theta, [["MaxStepX", 0.04], ["MaxStepY", 0.14], ["MaxStepTheta", 0.1], ["MaxStepFrequency", 0.1], ["StepHeight", 0.020], ["TorsoWx", 0], ["TorsoWy", 0]])
+            config = [["MaxStepX", 0.04], ["MaxStepY", 0.14], ["MaxStepTheta", 0.1], ["MaxStepFrequency", 0.1], ["StepHeight", 0.020], ["TorsoWx", 0], ["TorsoWy", 0]]
         else:
-            self.motion_service.moveTo(x, y, theta, self.move_config)
+            config = self.move_config
+
+        if wait:
+            self.motion_service.moveTo(x, y, theta, config)
+        else:
+            return self.motion_service.moveTo(x, y, theta, config, _async=True)
 
     def wait_for_start(self):
         while True:
             if self.memory_service.getData(HEAD_MIDDLE) == True:
                 break
 
-    def get_camera(self):
-        return self.camera
-    
     def get_yaw(self):
         return self.motion_service.getRobotPosition(True)[2] + self.delta_yaw  # Wz is an angle between [-pi, pi]
 
     def get_roll(self):
         return self.memory_service.getData(IMU_ROLL)
+
+    def get_foot_bumper(self):
+        # True si cualquiera de los 4 bumpers de la punta de los pies está presionado
+        return any(value > 0.5 for value in self.memory_service.getListData(FOOT_BUMPERS))
+
+    def get_shoulder_error(self):
+        # Diferencia máxima entre el ángulo comandado y el real de los hombros: crece si una pared empuja el brazo
+        commanded = self.motion_service.getAngles(SHOULDERS, False)
+        sensed = self.motion_service.getAngles(SHOULDERS, True)
+        return max(abs(c - s) for c, s in zip(commanded, sensed))
+
+    def get_robot_position(self):
+        return self.motion_service.getRobotPosition(True)
 
     def get_head_yaw_angle(self):
         return self.motion_service.getAngles(["HeadYaw"], True)[0]

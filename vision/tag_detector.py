@@ -5,10 +5,11 @@ from vision.camera import Camera
 
 class TagDetector:
     def __init__(self, session):
-        self.camera = Camera(session, colorspace=0, name="tag_cam", camera=0)
+        # QVGA: 4 veces menos datos por WiFi que VGA; quad_decimate se queda en 1.0 porque ya es imagen chica
+        self.camera = Camera(session, camera=0, resolution=1, colorspace=0, name="tag_cam")
         self.camera_params = self.get_camera_params()
         self.at_detector = Detector(families="tag36h11",
-                                    nthreads=1,
+                                    nthreads=4,
                                     quad_decimate=1.0,
                                     quad_sigma=0.8,
                                     refine_edges=1,

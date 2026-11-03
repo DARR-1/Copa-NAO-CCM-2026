@@ -9,6 +9,17 @@ CENTER_CELL = (BOARD_SIZE * BOARD_SIZE) // 2
 CELL_SIZE = 0.24 * 2
 VISITED_CELL_COST = 2
 
+# Bump detection while walking sideways (calibrate on the robot: watch the printed values on a normal step)
+BUMP_ROLL = math.radians(8)  # torso lean from the value before the move
+BUMP_SHOULDER_ERROR = 0.25  # rad between commanded and real shoulder roll
+BUMP_HITS = 2  # consecutive readings needed, so a single noisy sample doesn't stop the robot
+
+# Foot bumper hits are wall edges, not walls: back off a little and finish the side step
+EDGE_BACKOFF = 0.03  # m backwards before retrying
+MAX_EDGE_FIXES = 2  # after this many edge hits in one step, treat it as a wall
+
+HEAD_PITCH = math.radians(10)  # positive = down; tags are all at about the same height, so it stays fixed
+
 DIRECTION_OFFSETS = [-BOARD_SIZE, 1, BOARD_SIZE, -1]
 
 
@@ -152,6 +163,7 @@ class Maze:
         self.step_index = 0
 
         self.robot.set_yaw(0)  # Ensure the robot starts facing north
+        self.robot.look(HEAD_PITCH, 0)
 
     def get_goal_cell(self):
         if self.state == Maze.RETURNING:
@@ -185,26 +197,95 @@ class Maze:
 
         self.plan()
 
-    def update_from_detection(self):
+    def update_from_detection(self, replan=True):
+        # replan=False while a move is running: only record walls, because step() relies on the current path
         id_tag, theta_tag, _ = self.tag_detector.get_actual_detection(show_video=True)
 
+        position_changed = False
+
         # Tag 0 is a valid cell, so check for None instead of falsy
-        if id_tag is None:
-            return
+        if id_tag is not None:
+            theta_robot = self.robot.get_yaw() + self.robot.get_head_yaw_angle()
+            update_walls(id_tag, theta_tag, theta_robot)
 
-        position_changed = id_tag != self.current_cell
+            if replan:
+                position_changed = id_tag != self.current_cell
+                self.current_cell = id_tag
+                self.visited_cells.add(id_tag)
 
-        self.current_cell = id_tag
-        self.visited_cells.add(id_tag)
-
-        theta_robot = self.robot.get_yaw() + self.robot.get_head_yaw_angle()
-        update_walls(id_tag, theta_tag, theta_robot)
-
-        if walls != self.known_walls or position_changed:
+        # Also catches walls seen during the last move, even if no tag is visible now
+        if replan and (walls != self.known_walls or position_changed):
             self.known_walls = copy.deepcopy(walls)
             self.plan()
 
-            print(f"Detected tag {id_tag} with angle {theta_tag:.2f} radians. Updated walls.")
+            print(f"Replanned from cell {self.current_cell}. Walls updated.")
+
+    def get_bump(self, start_roll):
+        # "wall" = body/arm pushed sideways, "edge" = only the toe bumpers, None = nothing
+        roll = abs(self.robot.get_roll() - start_roll)
+        shoulder_error = self.robot.get_shoulder_error()
+        print(f"    bump check: roll={math.degrees(roll):4.1f} deg  shoulder={shoulder_error:.2f} rad", end="\r")
+
+        if roll > BUMP_ROLL or shoulder_error > BUMP_SHOULDER_ERROR:
+            return "wall"
+        if self.robot.get_foot_bumper():
+            return "edge"
+        return None
+
+    def move_and_watch(self, x, y, theta, watch_bump=False):
+        # Keep reading tags while walking instead of only after the move finishes.
+        # With watch_bump, stops the move and returns "wall" or "edge" if the robot hits something, else None
+        start_roll = self.robot.get_roll()
+        hits = 0
+        last_bump = None
+
+        future = self.robot.move_to(x, y, theta, caution=True, wait=False)
+
+        while not future.isFinished():
+            self.update_from_detection(replan=False)
+
+            if not watch_bump:
+                continue
+
+            bump = self.get_bump(start_roll)
+            hits = hits + 1 if bump is not None else 0
+            # A wall reading wins over an edge reading in the same streak
+            last_bump = "wall" if "wall" in (bump, last_bump) else bump
+
+            if hits >= BUMP_HITS:
+                self.robot.stop_move()
+                future.wait()
+                return last_bump
+
+            if bump is None:
+                last_bump = None
+
+        future.value()  # raises if the move failed
+        return None
+
+    def side_progress(self, start_position):
+        # Sideways distance walked since start_position, in the robot frame at the start of the step
+        x0, y0, yaw0 = start_position
+        x1, y1, _ = self.robot.get_robot_position()
+        return -math.sin(yaw0) * (x1 - x0) + math.cos(yaw0) * (y1 - y0)
+
+    def handle_bump(self, target_yaw, start_position):
+        print(f"Bumped into a wall going {target_yaw:.2f} rad from cell {self.current_cell}")
+
+        # The wall is on the current cell's side we were walking toward
+        wall_id = min(range(4), key=lambda i: abs(normalize_angle(target_yaw - walls_angles[i])))
+        walls[self.current_cell][wall_id] = True
+
+        # Walk back to where the step started (odometry, rotated into the robot frame)
+        x0, y0, _ = start_position
+        x1, y1, yaw = self.robot.get_robot_position()
+        dx, dy = x0 - x1, y0 - y1
+        back_x = math.cos(yaw) * dx + math.sin(yaw) * dy
+        back_y = -math.sin(yaw) * dx + math.cos(yaw) * dy
+        self.robot.move_to(back_x, back_y, 0, caution=True)
+
+        self.known_walls = copy.deepcopy(walls)
+        self.plan()
 
     def step(self):
         if self.step_index >= len(self.directions):
@@ -225,12 +306,34 @@ class Maze:
                 best_side = side
                 best_rotation = rotation
 
-        self.robot.move_to(0, 0, best_rotation, caution=True)  # Girar (maximo 90 grados)
+        self.move_and_watch(0, 0, best_rotation)  # Girar (maximo 90 grados)
 
         # Mirar hacia donde va a caminar
-        self.robot.look(-best_side * math.radians(16), best_side * math.pi / 2)
+        self.robot.look(HEAD_PITCH, best_side * math.pi / 2)
 
-        self.robot.move_to(0, best_side * CELL_SIZE, 0, caution=True)  # Avanzar de lado
+        start_position = self.robot.get_robot_position()
+        side_distance = best_side * CELL_SIZE
+        remaining = side_distance
+        backed_off = 0.0
+
+        for edge_fixes in range(MAX_EDGE_FIXES + 1):
+            bump = self.move_and_watch(0, remaining, 0, watch_bump=True)  # Avanzar de lado
+
+            if bump is None:
+                break
+
+            if bump == "wall" or edge_fixes == MAX_EDGE_FIXES:
+                self.handle_bump(target_yaw, start_position)  # stays in the same cell with a new path
+                return
+
+            # Toe hit an edge: step back off it and finish the rest of the side step
+            print(f"\nHit an edge, backing off {EDGE_BACKOFF:.2f} m")
+            self.robot.move_to(-EDGE_BACKOFF, 0, 0, caution=True)
+            backed_off += EDGE_BACKOFF
+            remaining = side_distance - self.side_progress(start_position)
+
+        if backed_off > 0:
+            self.robot.move_to(backed_off, 0, 0, caution=True)  # back to the middle of the row
 
         self.step_index += 1
         self.current_cell = self.path[self.step_index]
