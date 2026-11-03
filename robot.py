@@ -1,6 +1,7 @@
 import qi
 from vision.camera import Camera
 from vision.ball_detector import BallDetector
+from vision.goalkeeper_detector import GoalkeeperDetector
 from behaviors.kick import Kick
 #from vision.tag_detector import TagDetector
 import time
@@ -27,6 +28,8 @@ class Robot:
 
         self.camera = Camera(self.app.session)
         self.ball_detector = BallDetector(self.app.session)
+        # comparte la cámara de la pelota: get_movement cambia a la superior y regresa a la inferior
+        self.goalkeeper_detector = GoalkeeperDetector(self.ball_detector.camera)
         # self.tag_detector = TagDetector(self.app.session)
 
         self.kick = Kick(self)

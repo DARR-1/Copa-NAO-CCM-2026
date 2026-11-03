@@ -154,4 +154,3 @@ class GoalkeeperDetector:
         cv2.destroyAllWindows()
 
 
-#Falta implementar en striker

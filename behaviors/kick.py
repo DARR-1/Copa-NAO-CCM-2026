@@ -1,5 +1,8 @@
 LEG_STEP_CONFIG = [["StepHeight", 0.02]]  # pasos cortos para acomodarse frente a la pelota
 SHIFT = 0.35  # inclinación de cadera/tobillo para pasar el peso a la pierna de apoyo (subir si se cae hacia la pierna que patea)
+FINE_SIDE = 0.025  # m; correcciones laterales menores a esto se hacen con un solo par de pasos
+STANCE_WIDTH = 0.10  # m; separación normal entre pies (en Y)
+STEP_SPEED = 0.5  # fracción de la velocidad máxima para el par de pasos fino
 SPEED_MARGIN = 0.9  # fracción de la velocidad máxima de cada motor que se permite usar
 
 # Pose de pie; el pie queda plano cuando HipPitch + KneePitch + AnklePitch = 0
@@ -112,6 +115,29 @@ class Kick:
 
     def adjust_right(self):
         self.motion.moveTo(0.0, -0.05, 0.0, LEG_STEP_CONFIG)
+
+    def adjust_side(self, dy):
+        # dy en metros, positivo = izquierda; correcciones finas con un par de pasos, grandes con los dos pares de siempre
+        if abs(dy) > FINE_SIDE:
+            if dy > 0:
+                self.adjust_left()
+            else:
+                self.adjust_right()
+        else:
+            self._side_step_pair(dy)
+
+    def _side_step_pair(self, dy):
+        # Un solo par: el pie del lado de dy se abre y el otro lo sigue hasta la separación normal.
+        # Cada paso es la posición del pie que se mueve relativa al otro pie
+        if dy > 0:
+            legs = ["LLeg", "RLeg"]
+            steps = [[0.0, STANCE_WIDTH + dy, 0.0], [0.0, -STANCE_WIDTH, 0.0]]
+        else:
+            legs = ["RLeg", "LLeg"]
+            steps = [[0.0, -STANCE_WIDTH + dy, 0.0], [0.0, STANCE_WIDTH, 0.0]]
+
+        self.motion.setFootStepsWithSpeed(legs, steps, [STEP_SPEED] * 2, True)
+        self.motion.waitUntilMoveIsFinished()
 
     def adjust_front(self):
         self.motion.moveTo(0.05, 0.0, 0.0, LEG_STEP_CONFIG)
