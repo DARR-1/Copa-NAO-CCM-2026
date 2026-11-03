@@ -9,7 +9,8 @@ HITS_NEEDED = 3
 HEAD_PITCH = 0.35  # rad, positivo = hacia abajo (máx ~0.51)
 HEAD_SETTLE_TIME = 0.8  # seconds for the head to finish moving
 
-STOP_Y = 90
+# y = pixels below the image center (bottom camera); bigger = closer. Measure with test_striker.py -> c
+STOP_Y = 130  # walking stops here; keep it below KICK_Y so ALIGN's forward steps finish the approach
 STOP_HITS = 2
 LOST_LIMIT = 5
 
@@ -17,7 +18,7 @@ FWD_SPEED = 0.5
 
 TURN_ANGLE = 0.25
 KICK_X = {"left": -60, "right": 60}
-KICK_Y = 90
+KICK_Y = 160  # where the ball sits when it's in front of the kicking foot
 TOL_X = 20
 TOL_Y = 20
 MAX_ADJUSTS = 8
